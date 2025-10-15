@@ -9,11 +9,11 @@ function App() {
   return (
     <>
       
-      <EmpleadoSearch />
       <hr />
       <CalcularVacaciones />
       <hr />
       <FeriadosManager />
+      <hr />
     </>
   )
 }
