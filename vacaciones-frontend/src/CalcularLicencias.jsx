@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-function CalcularVacaciones() {
+function CalcularLicencias() {
   const [codigo, setCodigo] = useState("");
   const [empleado, setEmpleado] = useState(null);
   const [fechaInicio, setFechaInicio] = useState("");
@@ -8,7 +8,7 @@ function CalcularVacaciones() {
   const [resultado, setResultado] = useState(null);
   const [mensaje, setMensaje] = useState("");
 
-  // ocultar mensajes automáticos
+  //  borrar mensaje despues de pal segundos
   useEffect(() => {
     if (mensaje) {
       const timer = setTimeout(() => setMensaje(""), 6000);
@@ -31,16 +31,16 @@ function CalcularVacaciones() {
     }
   };
 
-  // calcular vacaciones
-  const calcularVacaciones = async () => {
+  // calcular Licencias
+  const calcularLicencia = async () => {
     if (!codigo || !fechaInicio || !dias) {
       setMensaje("⚠️ Por favor completa todos los campos");
       return;
     }
 
-    setMensaje("Calculando...");
+    setMensaje("⏳ Calculando...");
     try {
-      const res = await fetch("http://127.0.0.1:8000/guardar-vacaciones", {
+      const res = await fetch("http://127.0.0.1:8000/guardar-licencia", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -55,23 +55,12 @@ function CalcularVacaciones() {
 
       setResultado(data.data);
       setMensaje("✅ " + data.message);
-
-      setTimeout(() => {
-        setCodigo("");
-        setEmpleado(null);
-        setFechaInicio("");
-        setDias("");
-        setResultado(null);
-        setMensaje("");
-
-        //  mantenemos resultado visible
-      }, 4000);
     } catch (err) {
-      setMensaje(err.message);
+      setMensaje("❌ " + err.message);
     }
   };
 
-  // funcion para formatear fechas con día y mes en español
+  // formatear fecha con día y mes escrito en español
   const formatearFecha = (fechaStr) => {
     try {
       const fecha = new Date(fechaStr);
@@ -115,9 +104,10 @@ function CalcularVacaciones() {
           marginBottom: "25px",
         }}
       >
-        Cálculos para Vacaciones
+        Cálculos para Licencias
       </h3>
 
+      {/* Buscar empleado */}
       <div
         style={{
           display: "flex",
@@ -168,6 +158,7 @@ function CalcularVacaciones() {
         </div>
       )}
 
+      {/* Tabla de cálculos */}
       <table
         style={{
           width: "100%",
@@ -186,7 +177,7 @@ function CalcularVacaciones() {
                 border: "1px solid #999",
               }}
             >
-              Fecha inicio Vacaciones
+              Fecha inicio Licencia
             </th>
             <th
               style={{
@@ -206,7 +197,7 @@ function CalcularVacaciones() {
                 border: "1px solid #999",
               }}
             >
-              Fecha fin de Vacaciones
+              Fecha fin de Licencia
             </th>
             <th
               style={{
@@ -216,7 +207,7 @@ function CalcularVacaciones() {
                 border: "1px solid #999",
               }}
             >
-              Fecha de Reintegro Vacaciones
+              Fecha de Reintegro de Licencia
             </th>
           </tr>
         </thead>
@@ -242,7 +233,7 @@ function CalcularVacaciones() {
                 value={dias}
                 onChange={(e) => setDias(e.target.value)}
                 style={{
-                  width: "60px",
+                  width: "70px",
                   border: "1px solid #ccc",
                   borderRadius: "4px",
                   textAlign: "center",
@@ -261,7 +252,7 @@ function CalcularVacaciones() {
 
       <div style={{ textAlign: "center" }}>
         <button
-          onClick={calcularVacaciones}
+          onClick={calcularLicencia}
           style={{
             background: "#27ae60",
             color: "white",
@@ -272,7 +263,7 @@ function CalcularVacaciones() {
             cursor: "pointer",
           }}
         >
-        Calcular y Guardar
+          💾 Calcular y Guardar
         </button>
       </div>
 
@@ -296,4 +287,4 @@ function CalcularVacaciones() {
   );
 }
 
-export default CalcularVacaciones;
+export default CalcularLicencias;

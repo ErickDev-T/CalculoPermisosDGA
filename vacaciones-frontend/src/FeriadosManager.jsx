@@ -5,27 +5,42 @@ function FeriadosManager() {
   const [nuevo, setNuevo] = useState("");
   const [mensaje, setMensaje] = useState("");
 
-  //cargar feriados al iniciar
+  // función para formatear fechas con día y mes en español
+  const formatearFecha = (fechaStr) => {
+    try {
+      const fecha = new Date(fechaStr);
+      return fecha.toLocaleDateString("es-ES", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      });
+    } catch {
+      return fechaStr;
+    }
+  };
+
+  // cargar feriados al iniciar
   useEffect(() => {
     fetch("http://127.0.0.1:8000/feriados")
       .then((r) => r.json())
       .then(setFeriados)
-      .catch(() => setMensaje(" Error al cargar los feriados"));
+      .catch(() => setMensaje("⚠️ Error al cargar los feriados"));
   }, []);
 
-  // agregar un nuevo feriado
+  // agregar feriado
   const agregarFeriado = () => {
     if (!nuevo) {
-      setMensaje("Selecciona una fecha antes de agregar");
+      setMensaje(" Selecciona una fecha antes de agregar");
       return;
     }
     if (feriados.includes(nuevo)) {
-      setMensaje("Esa fecha ya está registrada");
+      setMensaje(" Esa fecha ya está registrada");
       return;
     }
     setFeriados([...feriados, nuevo]);
     setNuevo("");
-    setMensaje("Feriado agregado temporalmente");
+    setMensaje(" Feriado agregado temporalmente");
   };
 
   // eliminar feriado
@@ -34,21 +49,21 @@ function FeriadosManager() {
     setMensaje("Feriado eliminado");
   };
 
-  // guardar cambios en el backend
+  // guardar cambios
   const guardarCambios = async () => {
     try {
       await fetch("http://127.0.0.1:8000/feriados", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ feriados }), 
+        body: JSON.stringify({ feriados }),
       });
-      setMensaje("Feriados guardados correctamente");
+      setMensaje(" Feriados guardados correctamente");
     } catch (err) {
       setMensaje(" Error al guardar los cambios");
     }
   };
 
-  // ocultar mensaje automáticamente después de 5s
+  // ocultar mensaje automáticamente
   useEffect(() => {
     if (mensaje) {
       const timer = setTimeout(() => setMensaje(""), 5000);
@@ -76,7 +91,7 @@ function FeriadosManager() {
           marginBottom: "20px",
         }}
       >
-        📅 Gestión de Días Feriados
+        Gestión de Días Feriados
       </h3>
 
       <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
@@ -103,7 +118,7 @@ function FeriadosManager() {
             cursor: "pointer",
           }}
         >
-          ➕ Agregar
+          Agregar
         </button>
       </div>
 
@@ -122,6 +137,7 @@ function FeriadosManager() {
             No hay feriados registrados
           </p>
         )}
+
         {feriados.map((f) => (
           <li
             key={f}
@@ -136,7 +152,11 @@ function FeriadosManager() {
               border: "1px solid #e3e6ea",
             }}
           >
-            <span style={{ color: "#2c3e50" }}>{f}</span>
+            {/* fecha formateada */}
+            <span style={{ color: "#2c3e50", textTransform: "capitalize" }}>
+              {formatearFecha(f)}
+            </span>
+
             <button
               onClick={() => eliminarFeriado(f)}
               style={{
@@ -167,7 +187,7 @@ function FeriadosManager() {
           cursor: "pointer",
         }}
       >
-        💾 Guardar cambios
+        Guardar cambios
       </button>
 
       {mensaje && (

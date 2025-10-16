@@ -3,14 +3,15 @@ import './App.css'
 import EmpleadoSearch from './EmpleadoSearch.jsx'
 import FeriadosManager from './FeriadosManager.jsx'
 import CalcularVacaciones from './CalcularVacaciones.jsx'
+import CalcularLicencias from './CalcularLicencias.jsx'
 function App() {
   const [count, setCount] = useState(0)
 
   return (
     <>
-      
-      <hr />
       <CalcularVacaciones />
+      <hr />
+      <CalcularLicencias />
       <hr />
       <FeriadosManager />
       <hr />
