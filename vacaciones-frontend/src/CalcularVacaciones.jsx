@@ -1,3 +1,4 @@
+﻿
 import { useState, useEffect } from "react";
 
 function CalcularVacaciones() {
@@ -7,8 +8,18 @@ function CalcularVacaciones() {
   const [dias, setDias] = useState("");
   const [resultado, setResultado] = useState(null);
   const [mensaje, setMensaje] = useState("");
+  const [vacaciones, setVacaciones] = useState(null);
+  const [feriados, setFeriados] = useState([]);
 
-  // ocultar mensajes automáticos
+  // Cargar feriados (una vez) para cálculo local
+  useEffect(() => {
+    fetch("http://127.0.0.1:8000/feriados")
+      .then((r) => r.json())
+      .then((fechas) => (Array.isArray(fechas) ? setFeriados(fechas) : setFeriados([])))
+      .catch(() => setFeriados([]));
+  }, []);
+
+  // Ocultar mensajes automáticamente
   useEffect(() => {
     if (mensaje) {
       const timer = setTimeout(() => setMensaje(""), 6000);
@@ -16,13 +27,44 @@ function CalcularVacaciones() {
     }
   }, [mensaje]);
 
-  // buscar empleado
+  // Util: determina si es día laboral (no fin de semana ni feriado)
+  const esDiaLaboral = (fecha) => {
+    const dow = fecha.getDay(); // 0=Domingo, 6=Sábado
+    if (dow === 0 || dow === 6) return false;
+    const iso = fecha.toISOString().split("T")[0];
+    return !feriados.includes(iso);
+  };
+
+  // Cálculo local: misma lógica que el backend
+  const calcularVacacionesLocal = (fechaInicioStr, diasNum) => {
+    let fechaActual = new Date(fechaInicioStr);
+    let contados = 0;
+
+    while (contados < diasNum) {
+      fechaActual.setDate(fechaActual.getDate() + 1);
+      if (esDiaLaboral(fechaActual)) contados += 1;
+    }
+
+    const fechaFin = new Date(fechaActual);
+    // siguiente día laboral para reintegro
+    const reintegro = new Date(fechaFin);
+    do {
+      reintegro.setDate(reintegro.getDate() + 1);
+    } while (!esDiaLaboral(reintegro));
+
+    return {
+      fecha_fin: fechaFin.toISOString().split("T")[0],
+      fecha_reintegro: reintegro.toISOString().split("T")[0],
+    };
+  };
+
+  // Buscar empleado (detalle)
   const buscarEmpleado = async () => {
     setMensaje("");
     setEmpleado(null);
     setResultado(null);
     try {
-      const res = await fetch(`http://127.0.0.1:8000/empleado/${codigo}`);
+      const res = await fetch(`http://127.0.0.1:8000/empleado-detalle/${codigo}`);
       if (!res.ok) throw new Error("Empleado no encontrado");
       const data = await res.json();
       setEmpleado(data);
@@ -31,16 +73,35 @@ function CalcularVacaciones() {
     }
   };
 
-  // calcular vacaciones
+  // Calcular vacaciones localmente (rápido, sin guardar)
   const calcularVacaciones = async () => {
     if (!codigo || !fechaInicio || !dias) {
-      setMensaje("⚠️ Por favor completa todos los campos");
+      setMensaje("Por favor completa todos los campos");
       return;
     }
 
     setMensaje("Calculando...");
     try {
-      const res = await fetch("http://127.0.0.1:8000/guardar-vacaciones", {
+      const diasNum = Number(dias);
+      const data = calcularVacacionesLocal(fechaInicio, diasNum);
+      setResultado(data);
+      setVacaciones(data);
+      setMensaje("Cálculo realizado correctamente");
+    } catch (err) {
+      setMensaje("Error al calcular localmente");
+    }
+  };
+
+  // Guardar en Excel (backend)
+  const guardarVacaciones = async () => {
+    if (!codigo || !fechaInicio || !dias || !vacaciones) {
+      setMensaje("Primero calcula las vacaciones antes de guardar");
+      return;
+    }
+
+    setMensaje("Guardando...");
+    try {
+      const res = await fetch("http://127.0.0.1:8000/guardar-vacaciones-ext", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -53,25 +114,20 @@ function CalcularVacaciones() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Error al guardar");
 
-      setResultado(data.data);
-      setMensaje("✅ " + data.message);
-
-      setTimeout(() => {
-        setCodigo("");
-        setEmpleado(null);
-        setFechaInicio("");
-        setDias("");
-        setResultado(null);
-        setMensaje("");
-
-        //  mantenemos resultado visible
-      }, 4000);
+      // limpiar todos los campos y ocultar info al guardar con éxito
+      setMensaje("Vacaciones guardadas exitosamente");
+      setCodigo("");
+      setEmpleado(null);
+      setFechaInicio("");
+      setDias("");
+      setResultado(null);
+      setVacaciones(null);
     } catch (err) {
-      setMensaje(err.message);
+      setMensaje("Error: " + err.message);
     }
   };
 
-  // funcion para formatear fechas con día y mes en español
+  // Formatear fechas legibles
   const formatearFecha = (fechaStr) => {
     try {
       const fecha = new Date(fechaStr);
@@ -150,7 +206,7 @@ function CalcularVacaciones() {
             cursor: "pointer",
           }}
         >
-          🔍 Buscar
+          Buscar
         </button>
       </div>
 
@@ -159,12 +215,23 @@ function CalcularVacaciones() {
           style={{
             background: "#e6f0ff",
             borderRadius: "6px",
-            padding: "10px",
+            padding: "12px",
             marginBottom: "15px",
             border: "1px solid #bcd4ff",
           }}
         >
-          <strong>Nombre:</strong> {empleado.nombre}
+          <div style={{ display: "flex", gap: "16px", marginBottom: "6px" }}>
+            <div style={{ flex: 1 }}><strong>Código:</strong> {empleado.codigo}</div>
+            <div style={{ flex: 1 }}><strong>Nombre:</strong> {empleado.nombre}</div>
+          </div>
+          <div style={{ display: "flex", gap: "16px", marginBottom: "6px" }}>
+            <div style={{ flex: 1 }}><strong>Cargo:</strong> {empleado.cargo}</div>
+            <div style={{ flex: 1 }}><strong>Ubicación:</strong> {empleado.ubicacion}</div>
+          </div>
+          <div style={{ display: "flex", gap: "16px" }}>
+            <div style={{ flex: 1 }}><strong>Dependencia:</strong> {empleado.dependencia}</div>
+            <div style={{ flex: 1 }}><strong>Oficina:</strong> {empleado.oficina}</div>
+          </div>
         </div>
       )}
 
@@ -250,16 +317,16 @@ function CalcularVacaciones() {
               />
             </td>
             <td style={{ border: "1px solid #ccc", padding: "6px" }}>
-              {resultado ? formatearFecha(resultado.fecha_fin) : "—"}
+              {resultado ? formatearFecha(resultado.fecha_fin) : "-"}
             </td>
             <td style={{ border: "1px solid #ccc", padding: "6px" }}>
-              {resultado ? formatearFecha(resultado.fecha_reintegro) : "—"}
+              {resultado ? formatearFecha(resultado.fecha_reintegro) : "-"}
             </td>
           </tr>
         </tbody>
       </table>
 
-      <div style={{ textAlign: "center" }}>
+      <div style={{ textAlign: "center", marginTop: "10px" }}>
         <button
           onClick={calcularVacaciones}
           style={{
@@ -270,9 +337,25 @@ function CalcularVacaciones() {
             padding: "10px 20px",
             fontWeight: "600",
             cursor: "pointer",
+            marginRight: "10px",
           }}
         >
-        Calcular y Guardar
+          Calcular
+        </button>
+
+        <button
+          onClick={guardarVacaciones}
+          style={{
+            background: "#27ae60",
+            color: "white",
+            border: "none",
+            borderRadius: "6px",
+            padding: "10px 20px",
+            fontWeight: "600",
+            cursor: "pointer",
+          }}
+        >
+          Guardar
         </button>
       </div>
 
@@ -280,9 +363,9 @@ function CalcularVacaciones() {
         <p
           style={{
             marginTop: "20px",
-            color: mensaje.includes("❌")
+            color: (mensaje || "").toLowerCase().includes("error")
               ? "#e74c3c"
-              : mensaje.includes("⚠️")
+              : (mensaje || "").toLowerCase().includes("primero")
               ? "#f39c12"
               : "#2c3e50",
             textAlign: "center",

@@ -1,4 +1,4 @@
-import json
+﻿import json
 import os
 from datetime import datetime
 from fastapi import FastAPI, HTTPException
@@ -12,10 +12,12 @@ from dotenv import load_dotenv
 from O365 import Account
 import requests
 import tempfile
-
+from O365 import FileSystemTokenBackend
+from O365 import FileSystemTokenBackend, Account
+import json
+from fastapi import HTTPException
 from logic.vacaciones import calcular_vacaciones
 
-# CONFIGURACIÓN BÁSICA
 
 load_dotenv()
 
@@ -39,20 +41,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# FUNCION DE CONEXIÓN
+# conectar a onedrive 
 def conectar_drive():
     credentials = (CLIENT_ID, None)
     account = Account(credentials, auth_flow_type='authorization')
 
     if not account.is_authenticated:
-        print("Abriendo navegador para autenticación en OneDrive Personal...")
+        print("Abriendo navegador para autenticaciÃ³n en OneDrive Personal...")
         account.authenticate(scopes=['offline_access', 'User.Read', 'Files.ReadWrite'])
 
-    print("Autenticación exitosa con OneDrive Personal")
+    print("AutenticaciÃ³n exitosa con OneDrive Personal")
     return account.storage().get_default_drive()
 
 
-# FUNCIONES AUXILIARES
 def cargar_feriados():
     print("Leyendo feriados desde OneDrive...")
     credentials = (CLIENT_ID, None)
@@ -71,7 +72,7 @@ def cargar_feriados():
         response = account.connection.get(
             f"https://graph.microsoft.com/v1.0/me/drive/items/{file.object_id}/content"
         )
-        print(f"📡 Respuesta HTTP: {response.status_code}")  
+        print(f"Respuesta HTTP: {response.status_code}")  
 
         if response.status_code != 200:
             raise Exception(f"Error {response.status_code} al leer {FERIADOS_PATH}")
@@ -86,36 +87,34 @@ def cargar_feriados():
         raise HTTPException(status_code=400, detail=f"Error cargando feriados: {str(e)}")
 
 
-from O365 import FileSystemTokenBackend
 
-def guardar_feriados(fechas: List[str]):
+
+def guardar_feriados(fechas: list[str]):
     print("Subiendo feriados a OneDrive...")
 
-    # Cargar token guardado
     token_backend = FileSystemTokenBackend(token_path=".", token_filename="o365_token.txt")
     credentials = (CLIENT_ID, None)
     account = Account(credentials, auth_flow_type='authorization', token_backend=token_backend)
 
-    # autenticar si es necesario
     if not account.is_authenticated:
-        print("Autenticando...")
+        print("Autenticando manualmente...")
         account.authenticate(scopes=['offline_access', 'User.Read', 'Files.ReadWrite'])
 
-    # sorzar conexión activa
+    account.connection.refresh_token()  #  esta lÃ­nea reestablece la sesiÃ³n HTTP
     connection = account.connection
-    if connection is None:
-        raise HTTPException(status_code=400, detail="No se pudo establecer la conexión con OneDrive (token inválido o no cargado)")
 
-    # crear el JSON que se subira
+    if connection is None:
+        raise HTTPException(status_code=400, detail="No se pudo establecer la conexiÃ³n con OneDrive (token invÃ¡lido o sesiÃ³n no inicializada)")
+
+    # Crear el JSON que se subira
     data = json.dumps({"feriados": fechas}, indent=2, ensure_ascii=False)
     headers = {"Content-Type": "application/json"}
 
     url = f"https://graph.microsoft.com/v1.0/me/drive/root:{FERIADOS_PATH}:/content"
     print(f"Enviando a: {url}")
 
-    # subir a OneDrive PUT
+    # Subir al OneDrive con PUT
     response = connection.session.put(url, headers=headers, data=data.encode("utf-8"))
-
     print(f"Respuesta HTTP: {response.status_code}")
     print(f"Respuesta completa: {response.text}")
 
@@ -127,7 +126,7 @@ def guardar_feriados(fechas: List[str]):
 
 
 
-# MODELOS Pydantic
+
 class VacacionesRequest(BaseModel):
     fecha_inicio: str
     dias: int
@@ -153,11 +152,17 @@ def get_feriados():
 
 @app.post("/feriados")
 def post_feriados(req: FeriadosRequest):
+    print("ðŸ“… Datos recibidos:", req.feriados)
+
     try:
         guardar_feriados(req.feriados)
-        return {"message": "Feriados actualizados correctamente ✅"}
+        return {"message": "Feriados actualizados correctamente "}
     except Exception as e:
+        import traceback
+        print("Error detallado al guardar feriados:")
+        traceback.print_exc()  # imprime la traza completa en la consola
         raise HTTPException(status_code=400, detail=str(e))
+
 
 
 # CALCULAR VACACIONES
@@ -166,16 +171,17 @@ def post_calcular_vacaciones(request: VacacionesRequest):
     feriados = cargar_feriados()
     fecha_inicio = datetime.strptime(request.fecha_inicio, "%Y-%m-%d")
     fecha_fin, fecha_reintegro = calcular_vacaciones(fecha_inicio, request.dias, feriados)
+    # Devolver en formato ISO para que el frontend pueda formatear localmente
     return {
-        "fecha_inicio": fecha_inicio.strftime("%A, %d de %B %Y"),
-        "fecha_fin": fecha_fin.strftime("%A, %d de %B %Y"),
-        "fecha_reintegro": fecha_reintegro.strftime("%A, %d de %B %Y")
+        "fecha_inicio": fecha_inicio.strftime("%Y-%m-%d"),
+        "fecha_fin": fecha_fin.strftime("%Y-%m-%d"),
+        "fecha_reintegro": fecha_reintegro.strftime("%Y-%m-%d")
     }
 
 
 # LEER EMPLEADOS
 def cargar_empleados():
-    # conexion completa (retorna tanto el drive como el account)
+    # conexion entro 
     credentials = (CLIENT_ID, None)
     account = Account(credentials, auth_flow_type='authorization')
 
@@ -217,7 +223,7 @@ def cargar_empleados():
 def get_empleado(codigo: int):
     try:
         empleados_df = cargar_empleados()
-        empleado = empleados_df.loc[empleados_df["número"] == codigo]
+        empleado = empleados_df.loc[empleados_df["nÃºmero"] == codigo]
         if empleado.empty:
             raise HTTPException(status_code=404, detail="Empleado no encontrado")
         return {
@@ -259,12 +265,53 @@ def guardar_registro_excel(path: str, data: list):
         try:
             df = pd.read_excel(tmp_in.name)
         except Exception:
-            df = pd.DataFrame(columns=["Código", "Nombre", "Fecha inicio", "Días", "Fecha fin", "Fecha reintegro"])
+            df = pd.DataFrame(columns=["Código", "Nombre", "Fecha inicio", "Días", "Fecha fin", "Fecha reintegro", "Cargo", "Ubicación", "Dependencia", "Oficina"])
 
         os.remove(tmp_in.name)
 
+        # asegurar columnas esperadas y ordenar
+        expected = ["Código", "Nombre", "Fecha inicio", "Días", "Fecha fin", "Fecha reintegro", "Cargo", "Ubicación", "Dependencia", "Oficina"]
+        for col in expected:
+            if col not in df.columns:
+                df[col] = None
+        try:
+            df = df[expected]
+        except Exception:
+            pass
+
+        # normalizar datos de entrada a la fila esperada
+        row = None
+        if isinstance(data, dict):
+            # aceptar variantes de acentuacion mal codificadas
+            alt_keys = {
+                "Código": ["Código", "Código"],
+                "Código": ["Código", "Codigo"],
+                "Dias": ["Dias", "Dias"],
+                "Días": ["Días", "Dias"],
+                "Ubicación": ["Ubicacion", "Ubicacion"],
+                "Ubicacion": ["Ubicación", "Ubicacion"],
+    }
+            ordered = []
+            for col in expected:
+                v = data.get(col)
+                if v is None and col in alt_keys:
+                    for alt in alt_keys[col]:
+                        if alt in data:
+                            v = data.get(alt)
+                            break
+                ordered.append(v)
+            row = ordered
+        elif isinstance(data, (list, tuple)):
+            if len(data) == len(expected):
+                row = list(data)
+            elif len(data) == 6:
+                codigo, nombre, fecha_inicio_str, dias_val, fecha_fin_str, fecha_reint_str = data
+                row = [codigo, nombre, None, None, None, None, fecha_inicio_str, dias_val, fecha_fin_str, fecha_reint_str]
+        if row is None:
+            raise Exception("Formato de datos no soportado para guardar en Excel")
+
         # agregar nueva fila
-        df.loc[len(df)] = data
+        df.loc[len(df)] = row
 
         # guardar excel actualizado en temporal
         tmp_out = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
@@ -298,7 +345,7 @@ def guardar_vacaciones(request: GuardarVacacionesRequest):
         fecha_fin, fecha_reintegro = calcular_vacaciones(fecha_inicio, request.dias, feriados)
 
         empleados_df = cargar_empleados()
-        empleado = empleados_df.loc[empleados_df["número"] == request.codigo]
+        empleado = empleados_df.loc[empleados_df["nÃºmero"] == request.codigo]
         if empleado.empty:
             raise HTTPException(status_code=404, detail="Empleado no encontrado")
         nombre = empleado.iloc[0]["nombre"]
@@ -315,7 +362,16 @@ def guardar_vacaciones(request: GuardarVacacionesRequest):
             ]
         )
 
-        return {"message": "Vacaciones guardadas correctamente"}
+        #  los datos que el frontend necesita
+        return {
+            "message": "Vacaciones guardadas correctamente âœ…",
+            "data": {
+                "fecha_inicio": fecha_inicio.strftime("%Y-%m-%d"),
+                "fecha_fin": fecha_fin.strftime("%Y-%m-%d"),
+                "fecha_reintegro": fecha_reintegro.strftime("%Y-%m-%d")
+            }
+        }
+
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -328,7 +384,7 @@ def guardar_licencia(request: GuardarVacacionesRequest):
         fecha_fin, fecha_reintegro = calcular_vacaciones(fecha_inicio, request.dias, feriados)
 
         empleados_df = cargar_empleados()
-        empleado = empleados_df.loc[empleados_df["número"] == request.codigo]
+        empleado = empleados_df.loc[empleados_df["nÃºmero"] == request.codigo]
         if empleado.empty:
             raise HTTPException(status_code=404, detail="Empleado no encontrado")
         nombre = empleado.iloc[0]["nombre"]
@@ -345,12 +401,21 @@ def guardar_licencia(request: GuardarVacacionesRequest):
             ]
         )
 
-        return {"message": "Licencia guardada correctamente ✅"}
+        return {
+            "message": "Licencia guardada correctamente âœ…",
+            "data": {
+                "fecha_inicio": fecha_inicio.strftime("%Y-%m-%d"),
+                "fecha_fin": fecha_fin.strftime("%Y-%m-%d"),
+                "fecha_reintegro": fecha_reintegro.strftime("%Y-%m-%d")
+            }
+        }
+
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-# test conexión onedrive
+
+# test conexion onedrive
 @app.get("/test-onedrive")
 def test_onedrive():
     from O365 import Account
@@ -376,7 +441,7 @@ def test_onedrive():
         items = [item.name for item in root_folder.get_items(limit=5)]
 
         return {
-            "status": "Conexión exitosa con OneDrive Personal",
+            "status": "ConexiÃ³n exitosa con OneDrive Personal",
             "owner": owner,
             "email": email,
             "drive_type": drive_type,
@@ -386,3 +451,142 @@ def test_onedrive():
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=f" Error: {str(e)}")
+
+
+@app.get("/empleado-detalle/{codigo}")
+def get_empleado_detalle(codigo: int):
+    try:
+        empleados_df = cargar_empleados()
+        cols = [c for c in empleados_df.columns]
+        # detectar columna número
+        candidates_num = ["número", "numero", "n\u00famero", "nǧmero"]
+        num_col = next((c for c in candidates_num if c in cols), None)
+        if not num_col:
+            # buscar equivalentes sin acento
+            def norm(s):
+                return s.replace("á","a").replace("é","e").replace("í","i").replace("ó","o").replace("ú","u").replace("ñ","n")
+            cmap = {norm(c): c for c in cols}
+            for cand in candidates_num:
+                k = norm(cand)
+                if k in cmap:
+                    num_col = cmap[k]
+                    break
+        if not num_col:
+            raise HTTPException(status_code=400, detail="No se encontró columna de número en empleados")
+        empleado = empleados_df.loc[empleados_df[num_col] == codigo]
+        if empleado.empty:
+            raise HTTPException(status_code=404, detail="Empleado no encontrado")
+        row = empleado.iloc[0]
+        def pick(row, names):
+            for n in names:
+                if n in row: return row[n]
+            # variantes sin acentos
+            def norm(s):
+                return s.replace("á","a").replace("é","e").replace("í","i").replace("ó","o").replace("ú","u").replace("ñ","n")
+            cmap = {norm(k): k for k in row.index}
+            for n in names:
+                k = norm(n)
+                if k in cmap: return row[cmap[k]]
+            return ""
+        return {
+            "codigo": codigo,
+            "nombre": pick(row, ["nombre"]),
+            "cargo": pick(row, ["cargo"]),
+            "ubicacion": pick(row, ["ubicación","ubicacion"]),
+            "dependencia": pick(row, ["dependencia"]),
+            "oficina": pick(row, ["oficina"]),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+class GuardarVacacionesExtRequest(BaseModel):
+    codigo: int
+    fecha_inicio: str
+    dias: int
+
+@app.post("/guardar-vacaciones-ext")
+def guardar_vacaciones_ext(request: GuardarVacacionesExtRequest):
+    try:
+        feriados = cargar_feriados()
+        fecha_inicio = datetime.strptime(request.fecha_inicio, "%Y-%m-%d")
+        fecha_fin, fecha_reintegro = calcular_vacaciones(fecha_inicio, request.dias, feriados)
+
+        # obtener detalles del empleado
+        emp = get_empleado_detalle(request.codigo)
+
+        guardar_registro_excel(
+            VACACIONES_PATH,
+            {
+                "Código": request.codigo,
+                "Nombre": emp.get("nombre", ""),
+                "Fecha inicio": fecha_inicio.strftime("%Y-%m-%d"),
+                "Días": request.dias,
+                "Fecha fin": fecha_fin.strftime("%Y-%m-%d"),
+                "Fecha reintegro": fecha_reintegro.strftime("%Y-%m-%d"),
+                "Cargo": emp.get("cargo", ""),
+                "Ubicación": emp.get("ubicacion", ""),
+                "Dependencia": emp.get("dependencia", ""),
+                "Oficina": emp.get("oficina", ""),
+            }
+        )
+
+        return {
+            "message": "Vacaciones guardadas correctamente.",
+            "data": {
+                "fecha_inicio": fecha_inicio.strftime("%Y-%m-%d"),
+                "fecha_fin": fecha_fin.strftime("%Y-%m-%d"),
+                "fecha_reintegro": fecha_reintegro.strftime("%Y-%m-%d")
+            }
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# Variante extendida para Licencias
+class GuardarLicenciaExtRequest(BaseModel):
+    codigo: int
+    fecha_inicio: str
+    dias: int
+
+@app.post("/guardar-licencia-ext")
+def guardar_licencia_ext(request: GuardarLicenciaExtRequest):
+    try:
+        feriados = cargar_feriados()
+        fecha_inicio = datetime.strptime(request.fecha_inicio, "%Y-%m-%d")
+        fecha_fin, fecha_reintegro = calcular_vacaciones(fecha_inicio, request.dias, feriados)
+
+        emp = get_empleado_detalle(request.codigo)
+
+        guardar_registro_excel(
+            LICENCIAS_PATH,
+            {
+                "C�digo": request.codigo,
+                "Nombre": emp.get("nombre", ""),
+                "Fecha inicio": fecha_inicio.strftime("%Y-%m-%d"),
+                "D�as": request.dias,
+                "Fecha fin": fecha_fin.strftime("%Y-%m-%d"),
+                "Fecha reintegro": fecha_reintegro.strftime("%Y-%m-%d"),
+                "Cargo": emp.get("cargo", ""),
+                "Ubicaci�n": emp.get("ubicacion", ""),
+                "Dependencia": emp.get("dependencia", ""),
+                "Oficina": emp.get("oficina", ""),
+            }
+        )
+
+        return {
+            "message": "Licencia guardada correctamente.",
+            "data": {
+                "fecha_inicio": fecha_inicio.strftime("%Y-%m-%d"),
+                "fecha_fin": fecha_fin.strftime("%Y-%m-%d"),
+                "fecha_reintegro": fecha_reintegro.strftime("%Y-%m-%d")
+            }
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+
+
