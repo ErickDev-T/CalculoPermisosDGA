@@ -227,7 +227,7 @@ def get_empleado(codigo: int):
         if empleado.empty:
             raise HTTPException(status_code=404, detail="Empleado no encontrado")
         return {
-            "codigo": codigo,
+            "Código": codigo,
             "nombre": empleado.iloc[0]["nombre"]
         }
     except Exception as e:
@@ -285,11 +285,11 @@ def guardar_registro_excel(path: str, data: list):
             # aceptar variantes de acentuacion mal codificadas
             alt_keys = {
                 "Código": ["Código", "Código"],
-                "Código": ["Código", "Codigo"],
-                "Dias": ["Dias", "Dias"],
-                "Días": ["Días", "Dias"],
-                "Ubicación": ["Ubicacion", "Ubicacion"],
-                "Ubicacion": ["Ubicación", "Ubicacion"],
+                "Código": ["Código", "Código"],
+                "Días": ["Días", "Días"],
+                "Días": ["Días", "Días"],
+                "Ubicación": ["Ubicación", "Ubicación"],
+                "Ubicación": ["Ubicación", "Ubicación"],
     }
             ordered = []
             for col in expected:
@@ -489,10 +489,10 @@ def get_empleado_detalle(codigo: int):
                 if k in cmap: return row[cmap[k]]
             return ""
         return {
-            "codigo": codigo,
+            "Código": codigo,
             "nombre": pick(row, ["nombre"]),
             "cargo": pick(row, ["cargo"]),
-            "ubicacion": pick(row, ["ubicación","ubicacion"]),
+            "Ubicación": pick(row, ["Ubicación","Ubicación"]),
             "dependencia": pick(row, ["dependencia"]),
             "oficina": pick(row, ["oficina"]),
         }
@@ -517,6 +517,7 @@ def guardar_vacaciones_ext(request: GuardarVacacionesExtRequest):
 
         guardar_registro_excel(
             VACACIONES_PATH,
+            
             {
                 "Código": request.codigo,
                 "Nombre": emp.get("nombre", ""),
@@ -562,14 +563,14 @@ def guardar_licencia_ext(request: GuardarLicenciaExtRequest):
         guardar_registro_excel(
             LICENCIAS_PATH,
             {
-                "C�digo": request.codigo,
+                "Código": request.codigo,
                 "Nombre": emp.get("nombre", ""),
                 "Fecha inicio": fecha_inicio.strftime("%Y-%m-%d"),
-                "D�as": request.dias,
+                "Días": request.dias,
                 "Fecha fin": fecha_fin.strftime("%Y-%m-%d"),
                 "Fecha reintegro": fecha_reintegro.strftime("%Y-%m-%d"),
                 "Cargo": emp.get("cargo", ""),
-                "Ubicaci�n": emp.get("ubicacion", ""),
+                "Ubicación": emp.get("ubicacion", ""),
                 "Dependencia": emp.get("dependencia", ""),
                 "Oficina": emp.get("oficina", ""),
             }
@@ -586,6 +587,10 @@ def guardar_licencia_ext(request: GuardarLicenciaExtRequest):
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+
+
 
 
 
