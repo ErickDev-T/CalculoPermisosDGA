@@ -2,15 +2,15 @@ from datetime import datetime, timedelta
 from typing import List
 
 def es_dia_laboral(fecha: datetime, feriados: List[datetime]) -> bool:
-    """Devuelve False si la fecha cae sábado, domingo o feriado"""
-    if fecha.weekday() in [5, 6]:  # 5 = sábado, 6 = domingo
+    # devuelve False si la fecha cae sabado, domingo o feriado
+    if fecha.weekday() in [5, 6]:  # 5 = sabado, 6 = domingo
         return False
     if fecha in feriados:
         return False
     return True
 
 def calcular_vacaciones(fecha_inicio: datetime, dias: int, feriados: List[datetime]):
-    """Calcula la fecha fin y reintegro de vacaciones"""
+    # calcula la fecha fin y reintegro de vacaciones
     dias_contados = 0
     fecha_actual = fecha_inicio
 
